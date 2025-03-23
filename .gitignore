@@ -1,0 +1,39 @@
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+env/
+ENV/
+.venv/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.spec
+exeOutput.txt
+
+# Logs
+*.log
+Editor.log
+
+# System files
+.DS_Store
+Thumbs.db
+
+# VSCode settings
+.vscode/
+
+# PyInstaller artifacts
+DateInsert4AmazonPhoto.exe
+
+# external dependencies (user provided)
+geckodriver.exe
+FirefoxPortable/
+
+# Misc
+*.zip
