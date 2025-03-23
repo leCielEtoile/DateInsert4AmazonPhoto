@@ -28,14 +28,20 @@ Amazon Photos 上でアップロードされた VRChat のスクリーンショ�
 
 ## 🔹 使用方法
 
-### 1. 構成ファイルを配置
+### 1. ForefoxPortable・geckodriverをダウンロードし構成ファイルに配置
+
+- [PortableApp](https://portableapps.com/apps/internet/firefox_portable)のサイトにアクセスしFirefoxPortableをダウンロードしてください。
+- 続いて[geckodriver](https://github.com/mozilla/geckodriver/releases)をダウンロードしてください
+- ファイル内に配置しインストールしてください。
+- 最終的に以下のファイル構成になっていれば成功です。
 
 ```
 DateInsert4AmazonPhoto/
-├── DateInsert4AmazonPhoto.exe
+├── FirefoxPortable/           ← ポータブルFirefox一式
+|   └── FirefoxPortable.exe    ← ログイン情報登録に使用
 ├── config.json                ← 設定ファイル
 ├── geckodriver.exe            ← Firefox制御ドライバ
-└── FirefoxPortable/           ← ポータブルFirefox一式
+└── DateInsert4AmazonPhoto.exe
 ```
 
 ### 2. AmazonPhotoにログイン
@@ -73,25 +79,22 @@ DateInsert4AmazonPhoto/
 
 - 本アプリは `pyinstaller` によりビルドされています
 - `config.json`, `geckodriver.exe`, `FirefoxPortable/` は `.exe` に内包していないため、
-  配布時は同梱するかユーザーが任意に配置してください
-- 配布用に ZIP 化する際は以下を含めてください：
-
-```
-DateInsert4AmazonPhoto.zip
-├── DateInsert4AmazonPhoto.exe
-├── config.json
-├── geckodriver.exe
-└── FirefoxPortable/
-```
+  配布時は同梱するかユーザーが任意に配置してください(Firefoxは原則再配布禁止の為注意すること)
 
 ---
 
 ## ⚠ 注意事項
 
-- 本ツールは Amazon Photos の DOM構造に依存しています。
-  DOM構造が変更された場合、動作しない可能性があります。
-- 自己署名証明書で署名された `.exe` を使用している場合、
+- 本ツールは Amazon Photos の DOM構造・作成時点でのgeckodriver・Firefoxに依存しています。
+  DOM構造またはFirefoxのapi等が変更された場合、動作しない可能性があります。
+- 自己署名証明書等で署名された `.exe` を使用している場合、
   初回実行時に SmartScreen 警告が表示されることがあります。
+
+---
+
+## 将来
+
+- 導入の簡易化　追加でダウンロードするものも多く導入手順が煩雑なのでLicenseの許す限り自動化ができないか検討中
 
 ---
 
