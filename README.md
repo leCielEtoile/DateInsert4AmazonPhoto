@@ -1,10 +1,10 @@
-
 # DateInsert4AmazonPhoto
 
 Amazon Photos 上でアップロードされた VRChat のスクリーンショット画像に対して、
 ファイル名から撮影日と時刻を自動抽出し、Amazon Photos のメタデータとして反映させる自動化アプリケーションです。
 
 ---
+<br>
 
 ## ✨ 主な機能
 
@@ -16,6 +16,7 @@ Amazon Photos 上でアップロードされた VRChat のスクリーンショ�
 - ログ出力 (`Editor.log`) による動作確認
 
 ---
+<br>
 
 ## ⚡ 動作要件
 
@@ -25,6 +26,7 @@ Amazon Photos 上でアップロードされた VRChat のスクリーンショ�
 - Python 3.12.9
 
 ---
+<br>
 
 ## 🔹 使用方法
 
@@ -56,9 +58,11 @@ DateInsert4AmazonPhoto/
 - 処理が進行し、コンソールと `Editor.log` にログが出力されます
 
 ---
+<br>
 
-### 🔧 `config.json` の設定項目
+### 🔧 config.json の設定項目
 
+以下のように設計されています
 ```json
 {
   "firefox_path": "FirefoxPortable/App/Firefox64/firefox.exe",
@@ -75,6 +79,9 @@ DateInsert4AmazonPhoto/
 - `target_url`: Amazon Photos 一覧ページのURL
 - `initial_wait`: 一覧ページの読み込み待機時間（秒）
 
+---
+<br>
+
 ## 🌐 配布・再ビルドについて
 
 - 本アプリは `pyinstaller` によりビルドされています
@@ -82,6 +89,35 @@ DateInsert4AmazonPhoto/
   配布時は同梱するかユーザーが任意に配置してください(Firefoxは原則再配布禁止の為注意すること)
 
 ---
+<br>
+
+## 🧩 使用ライブラリ・外部ツールについて
+
+
+以下の Python ライブラリが必要です。
+
+| ライブラリ名 | 用途 |
+|--------------|------|
+| `requests`   | GeckoDriverの自動ダウンロード |
+| `tqdm`       | 進捗バー付きのダウンロード表示 |
+| `selenium`   | Firefox操作の自動化 |bash
+
+事前に次のコマンドでインストールしてください：
+
+```bash
+pip install requests tqdm selenium
+```
+※ 仮想環境（venv等）を使っている場合は、先に有効化してから実行してください。
+
+
+また本アプリケーションは以下の外部ツールを利用しています：
+
+- [Geckodriver](https://github.com/mozilla/geckodriver)  
+  Firefox の自動操作に使用される WebDriver。Mozilla Public License 2.0 に基づいて提供されています。  
+  初回起動時に、自動で最新版の Geckodriver を GitHub 公式リリースページからダウンロードします。
+
+---
+<br>
 
 ## ⚠ 注意事項
 
@@ -91,12 +127,14 @@ DateInsert4AmazonPhoto/
   初回実行時に SmartScreen 警告が表示されることがあります。
 
 ---
+<br>
 
 ## 将来
 
 - 導入の簡易化　追加でダウンロードするものも多く導入手順が煩雑なのでLicenseの許す限り自動化ができないか検討中
 
 ---
+<br>
 
 ## 🙏 作者・ライセンス
 

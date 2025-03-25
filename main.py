@@ -4,6 +4,11 @@ import sys
 import time
 import re
 import logging
+import io
+import zipfile
+import requests
+from tqdm import tqdm
+
 from selenium import webdriver
 from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.firefox.options import Options
@@ -64,8 +69,62 @@ def error_and_exit(message):
     sys.exit(1)
 
 # -------------------------------
+# GeckoDriver 自動ダウンロード処理
+# -------------------------------
+
+def download_latest_geckodriver(dest_dir: str):
+    exe_path = os.path.join(dest_dir, 'geckodriver.exe')
+    if os.path.exists(exe_path):
+        logger.info('geckodriver.exe は既に存在します。')
+        return exe_path
+
+    logger.info('geckodriver.exe が見つかりません。最新バージョンをダウンロードします...')
+
+    api_url = 'https://api.github.com/repos/mozilla/geckodriver/releases/latest'
+    headers = {
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'DateInsert4AmazonPhoto/1.0 (https://github.com/your-repo)'
+    }
+    try:
+        response = requests.get(api_url, headers=headers)
+        response.raise_for_status()
+        release_data = response.json()
+
+        asset_url = None
+        for asset in release_data['assets']:
+            if 'win64.zip' in asset['name']:
+                asset_url = asset['browser_download_url']
+                break
+
+        if not asset_url:
+            raise RuntimeError('Windows用geckodriverが見つかりませんでした。')
+
+        zip_name = asset_url.split('/')[-1]
+        logger.info(f"{zip_name} をダウンロード中...")
+
+        with requests.get(asset_url, headers={'User-Agent': headers['User-Agent']}, stream=True) as r:
+            r.raise_for_status()
+            total = int(r.headers.get('content-length', 0))
+            buffer = io.BytesIO()
+            with tqdm(total=total, unit='B', unit_scale=True, desc=zip_name) as bar:
+                for chunk in r.iter_content(chunk_size=8192):
+                    buffer.write(chunk)
+                    bar.update(len(chunk))
+
+        buffer.seek(0)
+        with zipfile.ZipFile(buffer) as zip_file:
+            zip_file.extract('geckodriver.exe', path=dest_dir)
+
+        logger.info(f'geckodriver.exe を {dest_dir} に保存しました。')
+        return exe_path
+
+    except Exception as e:
+        error_and_exit(f"Geckodriver のダウンロードに失敗しました: {e}")
+
+# -------------------------------
 # ファイル名から撮影日を抽出（例: VRChat_2023-01-01_12-00-00.png）
 # -------------------------------
+
 def extract_date_and_time_from_filename(filename: str):
     match = re.search(r"VRChat_(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})", filename)
     if not match:
@@ -88,7 +147,7 @@ def extract_date_and_time_from_filename(filename: str):
     return date_str, time_str
 
 # -------------------------------
-# 設定ファイル（config.json）読み込みとパス検証
+# 設定ファイル（config.json）読み込み・GeckoDriver 自動チェック
 # -------------------------------
 
 CONFIG_FILE = "config.json"
@@ -108,12 +167,16 @@ target_url = config.get("target_url", "").strip()
 
 if not os.path.isfile(firefox_path):
     error_and_exit(f"Firefox 実行ファイルが見つかりません: {firefox_path}")
-if not os.path.isfile(geckodriver_path):
-    error_and_exit(f"GeckoDriver が見つかりません: {geckodriver_path}")
 if not os.path.isdir(profile_path):
     error_and_exit(f"Firefox プロファイルが見つかりません: {profile_path}")
 if not target_url.startswith("http"):
     error_and_exit("target_url の指定が不正です。http で始まる URL を指定してください。")
+
+# geckodriver.exe が無ければダウンロード
+if not os.path.isfile(geckodriver_path):
+    dest_dir = os.path.dirname(geckodriver_path)
+    os.makedirs(dest_dir, exist_ok=True)
+    geckodriver_path = download_latest_geckodriver(dest_dir)
 
 # -------------------------------
 # Firefox + Selenium 起動
