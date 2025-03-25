@@ -1,7 +1,7 @@
 # DateInsert4AmazonPhoto
 
-Amazon Photos 上でアップロードされた VRChat のスクリーンショット画像に対して、
-ファイル名から撮影日と時刻を自動抽出し、Amazon Photos のメタデータとして反映させる自動化アプリケーションです。
+Amazon Photos にアップロードされた VRChat のスクリーンショット画像に対して、
+**ファイル名から撮影日時を自動抽出し、Amazon Photos のメタデータとして反映する自動化ツール**です。
 
 ---
 <br>
@@ -21,7 +21,7 @@ Amazon Photos 上でアップロードされた VRChat のスクリーンショ�
 ## ⚡ 動作要件
 
 - Windows 10 / 11
-- Firefox Portable（64bit）
+- Firefox（Portable版 または 通常インストール版）
 - GeckoDriver（Firefox操作用）
 - Python 3.12.9
 
@@ -30,39 +30,57 @@ Amazon Photos 上でアップロードされた VRChat のスクリーンショ�
 
 ## 🔹 使用方法
 
-### 1. ForefoxPortable・geckodriverをダウンロードし構成ファイルに配置
+### 1. ForefoxPortableをダウンロードし構成ファイルに配置
 
-- [PortableApp](https://portableapps.com/apps/internet/firefox_portable)のサイトにアクセスしFirefoxPortableをダウンロードしてください。
-- 続いて[geckodriver](https://github.com/mozilla/geckodriver/releases)をダウンロードしてください
-- ファイル内に配置しインストールしてください。
-- 最終的に以下のファイル構成になっていれば成功です。
+- [PortableApps.com](https://portableapps.com/apps/internet/firefox_portable) より Firefox Portable をダウンロードしてください
+- 任意のフォルダに解凍し、以下のような構成にしてください：
 
 ```
 DateInsert4AmazonPhoto/
 ├── FirefoxPortable/           ← ポータブルFirefox一式
 |   └── FirefoxPortable.exe    ← ログイン情報登録に使用
-├── config.json                ← 設定ファイル
-├── geckodriver.exe            ← Firefox制御ドライバ
 └── DateInsert4AmazonPhoto.exe
 ```
 
-### 2. AmazonPhotoにログイン
+### 通常の Firefox を使用する場合
 
-- `DateInsert4AmazonPhoto\FirefoxPortable\FirefoxPortable.exe` をダブルクリックして起動します
-- [Amazon Photo](https://www.amazon.co.jp/photos/)にアクセスしログインします
-- これによりプロファイル情報にAmazonPhotoのログイン情報が登録されます
+- `DateInsert4AmazonPhoto.exe` を起動すると `config.json` が自動生成されます
+- 以下のようにパスを編集してください：
 
-### 4. アプリを起動
+```json
+{
+  "firefox_path": "インストールされている場所(デフォルトでは C:/Program Files/Mozilla Firefox/firefox.exe)",
+  "profile_path": "プロファイルが保存されている場所(デフォルトでは %APPDATA%/Mozilla/Firefox/Profiles )",
+}
+```
 
-- `DateInsert4AmazonPhoto.exe` をダブルクリックして起動します
-- 処理が進行し、コンソールと `Editor.log` にログが出力されます
+- 以下のファイル構成になっていれば成功です。
+
+```
+DateInsert4AmazonPhoto/
+├── config.json                ← 設定ファイル
+├── Editor.log                 ← logファイル(DateInsert4AmazonPhoto.exeを実行する際自動生成)
+└── DateInsert4AmazonPhoto.exe
+```
+
+### 2. Amazon Photos にログイン
+
+- `FirefoxPortable/FirefoxPortable.exe` を起動し、
+  [Amazon Photos](https://www.amazon.co.jp/photos/) にアクセスしてログインしてください
+- ログイン情報はプロファイルに保存され、以後の自動操作で利用されます
+
+---
+
+### 3. アプリを起動
+
+- `DateInsert4AmazonPhoto.exe` を実行すると、未設定の画像に対して撮影日時が順次入力されます
+- 進捗ログはコンソールと `Editor.log` に出力されます
 
 ---
 <br>
 
-### 🔧 config.json の設定項目
+## 🔧 config.json の設定項目
 
-以下のように設計されています
 ```json
 {
   "firefox_path": "FirefoxPortable/App/Firefox64/firefox.exe",
@@ -73,71 +91,69 @@ DateInsert4AmazonPhoto/
 }
 ```
 
-- `firefox_path`: ポータブルFirefoxの実行ファイルパス
-- `geckodriver_path`: GeckoDriverのパス
-- `profile_path`: ログイン済みのFirefoxプロファイルパス
-- `target_url`: Amazon Photos 一覧ページのURL
-- `initial_wait`: 一覧ページの読み込み待機時間（秒）
+| 項目名             | 説明 |
+|-------------------|------|
+| `firefox_path`    | Firefox実行ファイルのパス |
+| `geckodriver_path`| GeckoDriverのパス（自動ダウンロードされます） |
+| `profile_path`    | ログイン済みのFirefoxプロファイルフォルダ |
+| `target_url`      | Amazon Photosの初期アクセスURL |
+| `initial_wait`    | 初期ロード待機時間（秒） |
 
 ---
 <br>
 
 ## 🌐 配布・再ビルドについて
 
-- 本アプリは `pyinstaller` によりビルドされています
-- `config.json`, `geckodriver.exe`, `FirefoxPortable/` は `.exe` に内包していないため、
-  配布時は同梱するかユーザーが任意に配置してください(Firefoxは原則再配布禁止の為注意すること)
+- 本アプリは PyInstaller により `.exe` としてビルドされています
+- `config.json`, `geckodriver.exe`, `FirefoxPortable/` は `.exe` に含まれないため、配布時には同梱または別途取得が必要です
+- Firefox Portable の再配布はライセンス上禁止されているため、使用者が各自ダウンロードしてください
 
 ---
 <br>
 
-## 🧩 使用ライブラリ・外部ツールについて
-
-
-以下の Python ライブラリが必要です。
+## 🧩 使用ライブラリ・外部ツール
 
 | ライブラリ名 | 用途 |
 |--------------|------|
-| `requests`   | GeckoDriverの自動ダウンロード |
-| `tqdm`       | 進捗バー付きのダウンロード表示 |
-| `selenium`   | Firefox操作の自動化 |bash
+| `requests`   | GeckoDriverの自動取得 |
+| `tqdm`       | ダウンロード時の進捗表示 |
+| `selenium`   | Firefoxのブラウザ自動操作 |
 
-事前に次のコマンドでインストールしてください：
+インストール方法：
 
 ```bash
 pip install requests tqdm selenium
 ```
-※ 仮想環境（venv等）を使っている場合は、先に有効化してから実行してください。
+※ 仮想環境（venv等）を使っている場合は、先に有効化してから実行してください
 
 
 また本アプリケーションは以下の外部ツールを利用しています：
 
-- [Geckodriver](https://github.com/mozilla/geckodriver)  
-  Firefox の自動操作に使用される WebDriver。Mozilla Public License 2.0 に基づいて提供されています。  
-  初回起動時に、自動で最新版の Geckodriver を GitHub 公式リリースページからダウンロードします。
+- [GeckoDriver](https://github.com/mozilla/geckodriver)  
+  Firefox を自動操作するための WebDriver。初回起動時に最新版が自動ダウンロードされます
 
 ---
 <br>
 
 ## ⚠ 注意事項
 
-- 本ツールは Amazon Photos の DOM構造・作成時点でのgeckodriver・Firefoxに依存しています。
-  DOM構造またはFirefoxのapi等が変更された場合、動作しない可能性があります。
-- 自己署名証明書等で署名された `.exe` を使用している場合、
-  初回実行時に SmartScreen 警告が表示されることがあります。
+- 本ツールは Amazon Photos の DOM構造・作成時点でのgeckodriver・Firefoxに依存しています
+  Amazon Photos のDOM構造変更・Firefox API変更などにより動作しなくなる可能性があります
+- 初回実行時に SmartScreen 警告が表示されることがあります
 
 ---
 <br>
 
-## 将来
+## 📌 今後の予定
 
-- 導入の簡易化　追加でダウンロードするものも多く導入手順が煩雑なのでLicenseの許す限り自動化ができないか検討中
+- 導入手順の簡略化（GeckoDriverやFirefox自動取得のさらなる統合）
+- 設定GUIの追加検討
 
 ---
 <br>
 
-## 🙏 作者・ライセンス
+## 🙏 開発者・ライセンス
 
-- 開発者: le ciel etoile : [Twitter(X)](https://x.com/_le_ciel_etoile)
-- ライセンス: MIT
-- このツールは非公式であり、Amazon または VRChat による承認を受けていません。
+- 開発者: le ciel etoile [Twitter (X)](https://x.com/_le_ciel_etoile)
+- ライセンス: MIT License
+- 本ツールは非公式であり、Amazon社および VRChat社による承認を受けていません
