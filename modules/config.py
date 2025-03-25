@@ -1,17 +1,27 @@
 """
-config.py - アプリケーション設定（config.json）の読み込みと検証を行うモジュール
+config.py - アプリケーション設定ファイル(config.json)の読み込み・検証・自動生成を行うモジュール
 
 主な機能:
-- 設定ファイル(config.json)の存在確認と読み込み
-- 不正な形式や欠落に対してはログ出力し即時終了
+- 設定ファイルの存在確認
+- 存在しない場合のデフォルト生成
+- JSON形式の読み込みと検証
 """
 
 import os
 import json
 from modules.logger import setup_logger
 
-# 共通ロガーの取得
+# ロガー初期化
 logger = setup_logger()
+
+# 自動生成用のデフォルト設定（初期値）
+DEFAULT_CONFIG = {
+    "firefox_path": "FirefoxPortable/App/Firefox64/firefox.exe",
+    "geckodriver_path": "geckodriver.exe",
+    "profile_path": "FirefoxPortable/Data/profile",
+    "target_url": "https://www.amazon.co.jp/photos/all?timeYear=1000&lcf=time",
+    "initial_wait": 5
+}
 
 def error_and_exit(message):
     """
@@ -23,22 +33,36 @@ def error_and_exit(message):
     logger.error(message)
     exit(1)
 
-def load_config(path="config.json"):
+def create_default_config(path):
     """
-    指定されたパスからJSON形式の設定ファイルを読み込み、辞書として返す。
+    デフォルトの config.json を生成する。
 
     Args:
-        path (str): 読み込む設定ファイルのパス（デフォルト: config.json）
+        path (str): 生成先のファイルパス
+
+    動作:
+    - DEFAULT_CONFIG の内容を JSON としてファイルに書き出す
+    - ユーザーに編集を促す警告ログを出力する
+    """
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(DEFAULT_CONFIG, f, indent=4, ensure_ascii=False)
+    logger.warning(f"{path} が見つからなかったため、デフォルト設定を作成しました。必要に応じて編集してください。")
+
+def load_config(path="config.json"):
+    """
+    設定ファイルを読み込む。存在しない場合は自動生成する。
+
+    Args:
+        path (str): 読み込む設定ファイルのパス（省略時は config.json）
 
     Returns:
-        dict: 設定内容を格納した辞書
+        dict: 設定内容を格納した辞書（JSON形式）
 
     Raises:
-        FileNotFoundError: ファイルが存在しない場合
-        JSONDecodeError: JSONの構文が不正な場合
+        JSONDecodeError: ファイルが存在するが構文が壊れている場合
     """
     if not os.path.exists(path):
-        error_and_exit("設定ファイル config.json が見つかりません。")
+        create_default_config(path)
 
     try:
         with open(path, "r", encoding="utf-8") as f:
