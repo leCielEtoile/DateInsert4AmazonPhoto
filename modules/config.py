@@ -1,32 +1,40 @@
 """
-config.py - アプリケーション設定ファイル(config.json)の読み込み・検証・自動生成を行うモジュール
+config.py - アプリケーション設定ファイル(config.ini)の読み込み・検証を行うモジュール
 
 主な機能:
-- 設定ファイルの存在確認
-- 存在しない場合のデフォルト生成
-- JSON形式の読み込みと検証
+- INI形式の設定ファイル読み込み（configparser 使用）
+- 存在しない場合はサンプルINIファイルを自動生成
+- セクションごとに Firefox / Chrome / 共通設定を管理
 """
 
 import os
-import json
+import configparser
 from modules.logger import setup_logger
 
 # ロガー初期化
 logger = setup_logger()
 
-# 自動生成用のデフォルト設定（初期値）
-DEFAULT_CONFIG = {
-    "firefox_path": "FirefoxPortable/App/Firefox64/firefox.exe",
-    "geckodriver_path": "geckodriver.exe",
-    "profile_path": "FirefoxPortable/Data/profile",
-    "target_url": "https://www.amazon.co.jp/photos/all?timeYear=1000&lcf=time",
-    "initial_wait": 5
-}
+# 自動生成用のデフォルト設定（初回起動時）
+DEFAULT_CONFIG = """[general]
+browser = chrome
+target_url = https://www.amazon.co.jp/photos/all?timeYear=1000&lcf=time
+initial_wait = 5
+
+[firefox]
+firefox_path = FirefoxPortable/App/Firefox64/firefox.exe
+geckodriver_path = geckodriver.exe
+profile_path = FirefoxPortable/Data/profile
+
+[chrome]
+chrome_path = C:/Program Files/Google/Chrome/Application/chrome.exe
+chromedriver_path = chromedriver.exe
+user_data_dir = C:/Users/YourName/AppData/Local/Google/Chrome/User Data
+profile_directory = Default
+"""
 
 def error_and_exit(message):
     """
     致命的なエラーをログに出力し、プログラムを強制終了する。
-
     Args:
         message (str): エラーメッセージ
     """
@@ -35,37 +43,25 @@ def error_and_exit(message):
 
 def create_default_config(path):
     """
-    デフォルトの config.json を生成する。
-
+    デフォルトの config.ini を生成する。
     Args:
-        path (str): 生成先のファイルパス
-
-    動作:
-    - DEFAULT_CONFIG の内容を JSON としてファイルに書き出す
-    - ユーザーに編集を促す警告ログを出力する
+        path (str): 生成先ファイルパス
     """
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(DEFAULT_CONFIG, f, indent=4, ensure_ascii=False)
-    logger.warning(f"{path} が見つからなかったため、デフォルト設定を作成しました。必要に応じて編集してください。")
+        f.write(DEFAULT_CONFIG)
+    logger.warning(f"{path} が見つからなかったため、初期設定ファイルを生成しました。編集して再実行してください。")
 
-def load_config(path="config.json"):
+def load_config(path="config.ini"):
     """
-    設定ファイルを読み込む。存在しない場合は自動生成する。
-
+    INI形式の設定ファイルを読み込む（存在しなければ自動生成）。
     Args:
-        path (str): 読み込む設定ファイルのパス（省略時は config.json）
-
+        path (str): 読み込む設定ファイルのパス（省略時は config.ini）
     Returns:
-        dict: 設定内容を格納した辞書（JSON形式）
-
-    Raises:
-        JSONDecodeError: ファイルが存在するが構文が壊れている場合
+        configparser.ConfigParser: 読み込まれた設定オブジェクト
     """
     if not os.path.exists(path):
         create_default_config(path)
 
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except json.JSONDecodeError:
-        error_and_exit("config.json の形式に誤りがあります。")
+    config = configparser.ConfigParser(interpolation=None)
+    config.read(path, encoding="utf-8")
+    return config

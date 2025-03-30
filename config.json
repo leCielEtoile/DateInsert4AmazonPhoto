@@ -1,7 +1,0 @@
-{
-    "firefox_path": "FirefoxPortable/App/Firefox64/firefox.exe",
-    "geckodriver_path": "geckodriver.exe",
-    "profile_path": "FirefoxPortable/Data/profile",
-    "target_url": "https://www.amazon.co.jp/photos/all?timeYear=1000&lcf=time",
-    "initial_wait": 5
-}
