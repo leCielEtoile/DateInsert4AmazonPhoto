@@ -3,21 +3,27 @@ logger.py - アプリケーション全体で共通使用されるロガー（lo
 
 機能:
 - コンソール出力：色付きで視認性の高いログ
-- ファイル出力：Editor.log に全ログを記録
+- ファイル出力：logs/app.log に全ログを記録
 - 二重設定防止：ロガーがすでに設定済みなら再設定しない
 """
 
+import os
 import logging
+from datetime import datetime
 
-def setup_logger():
+def setup_logger(name="DateInsert4AmazonPhoto", log_file="logs/app.log"):
     """
-    カスタムロガー 'DateInsert4AmazonPhoto' を初期化し、StreamHandler（カラー付き）と
-    FileHandler（Editor.log）を設定して返す。
+    カスタムロガーを初期化し、StreamHandler（カラー付き）と
+    FileHandler（log_file）を設定して返す。
+
+    Args:
+        name (str): ロガー名
+        log_file (str): ログファイルのパス
 
     Returns:
         logging.Logger: 設定済みのロガーオブジェクト
     """
-    logger = logging.getLogger("DateInsert4AmazonPhoto")
+    logger = logging.getLogger(name)
 
     # 重複設定を防ぐ（すでにハンドラが存在する場合は再設定しない）
     if logger.hasHandlers():
@@ -51,8 +57,13 @@ def setup_logger():
     st_handler.setLevel(logging.DEBUG)
     st_handler.setFormatter(ColorFormatter(log_format))
 
+    # ログディレクトリの作成
+    log_dir = os.path.dirname(log_file)
+    if log_dir and not os.path.exists(log_dir):
+        os.makedirs(log_dir, exist_ok=True)
+
     # ファイル用ハンドラ
-    fl_handler = logging.FileHandler(filename="Editor.log", encoding="utf-8")
+    fl_handler = logging.FileHandler(filename=log_file, encoding="utf-8")
     fl_handler.setLevel(logging.DEBUG)
     fl_handler.setFormatter(logging.Formatter(log_format))
 

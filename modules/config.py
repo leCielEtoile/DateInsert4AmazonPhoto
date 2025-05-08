@@ -16,11 +16,15 @@ logger = setup_logger()
 
 # 自動生成用のデフォルト設定（初期値）
 DEFAULT_CONFIG = {
+    "browser_type": "firefox",  # firefox または chrome
     "firefox_path": "FirefoxPortable/App/Firefox64/firefox.exe",
-    "geckodriver_path": "geckodriver.exe",
+    "firefox_driver_path": "drivers/geckodriver.exe",
+    "chrome_path": "C:/Program Files/Google/Chrome/Application/chrome.exe",
+    "chrome_driver_path": "drivers/chromedriver.exe",
     "profile_path": "FirefoxPortable/Data/profile",
     "target_url": "https://www.amazon.co.jp/photos/all?timeYear=1000&lcf=time",
-    "initial_wait": 5
+    "initial_wait": 5,
+    "filename_pattern": "VRChat_(\\d{4})-(\\d{2})-(\\d{2})_(\\d{2})-(\\d{2})-(\\d{2})"
 }
 
 def error_and_exit(message):
