@@ -48,12 +48,13 @@ class PhotoProcessor:
             photo_links (list): 写真リンク要素のリスト
             
         Returns:
-            bool: 少なくとも1つの写真が更新された場合はTrue
+            bool: まだ処理が必要な写真がある場合はTrue
+                  （すべての写真が正しい日付で設定済みならFalse）
         """
         if not photo_links:
             return False
             
-        updated_any = False
+        all_processed = True  # すべての写真が正しく処理された場合True
         
         for i, link in enumerate(photo_links):
             url = link.get_attribute("href")
@@ -68,16 +69,19 @@ class PhotoProcessor:
             time.sleep(1)
             
             try:
+                # 写真の処理が必要だった場合（設定されていないか、不正確な場合）
                 if self.set_shooting_date():
-                    updated_any = True
+                    all_processed = False  # まだ処理が必要な写真がある
             except Exception as e:
                 logger.error(f"写真処理中にエラー発生: {type(e).__name__}: {e}")
+                all_processed = False  # エラーが発生したので再処理の可能性あり
                 
             # タブを閉じてメインタブに戻る
             self.driver.close()
             self.driver.switch_to.window(self.driver.window_handles[0])
-            
-        return updated_any
+        
+        # 戻り値を逆にする - まだ処理が必要な写真があるかどうか
+        return not all_processed
     
     def extract_date_and_time_from_filename(self, filename):
         """
@@ -106,10 +110,10 @@ class PhotoProcessor:
     
     def set_shooting_date(self):
         """
-        現在表示中の写真詳細ページで、撮影日時を設定
+        現在表示中の写真詳細ページで、撮影日時を設定または更新
         
         Returns:
-            bool: 設定に成功した場合はTrue
+            bool: 設定/更新に成功した場合はTrue
         """
         try:
             # 情報パネルを開く
@@ -118,29 +122,42 @@ class PhotoProcessor:
                 info_button.click()
                 logger.debug(" → 情報パネルを開きました。")
             
-            # すでに撮影日があるか確認
-            if self._is_date_already_set():
-                logger.info(" → 撮影日がすでに設定済みのためスキップします。")
-                return False
-            
             # ファイル名取得
             filename = self._get_filename()
             if not filename:
                 return False
                 
-            # 日付と時刻を抽出
-            date_str, time_str = self.extract_date_and_time_from_filename(filename)
-            if not date_str or not time_str:
+            # ファイル名から日付と時刻を抽出
+            file_date_str, file_time_str = self.extract_date_and_time_from_filename(filename)
+            if not file_date_str or not file_time_str:
                 logger.warning(" → ファイル名から日付/時間が抽出できません。")
                 return False
                 
-            logger.info(f" → 抽出された日付: {date_str} / 時間: {time_str}")
+            logger.info(f" → ファイル名から抽出: 日付={file_date_str}, 時間={file_time_str}")
             
-            # 日付入力フォームを開く
-            if not self._open_date_form():
-                return False
+            # 既存の日付設定を確認
+            is_date_set, current_date_str, current_time_str = self._is_date_already_set()
             
-            # 入力処理前の値をログ出力（DEBUGレベルに変更）
+            if is_date_set:
+                logger.debug(f" → 現在の設定: 日付={current_date_str}, 時間={current_time_str}")
+                
+                # 日付と時刻が正しいか比較
+                if current_date_str == file_date_str and current_time_str == file_time_str:
+                    logger.info(" → 撮影日時は正しく設定されています。スキップします。")
+                    return False
+                else:
+                    logger.info(" → 撮影日時が異なります。更新します。")
+                    # 編集ボタンをクリック
+                    edit_btn = self.driver.find_element(By.CSS_SELECTOR, ".detail-item.date-info h4 button.edit-btn")
+                    edit_btn.click()
+                    logger.debug(" → 日付編集ダイアログを開きました。")
+            else:
+                # 日付設定がまだない場合
+                logger.info(" → 撮影日時が未設定です。新規設定します。")
+                if not self._open_date_form():
+                    return False
+            
+            # 入力処理前の値をログ出力
             try:
                 year_val = self.driver.find_element(By.CSS_SELECTOR, ".year.date-piece input[name='year']").get_attribute("value")
                 month_val = self.driver.find_element(By.CSS_SELECTOR, ".month.date-piece input[name='month']").get_attribute("value")
@@ -150,10 +167,10 @@ class PhotoProcessor:
             except Exception as e:
                 logger.debug(f" → 入力前の値の取得に失敗: {e}")
             
-            # 入力処理
-            self._input_date_time(date_str, time_str)
+            # 日付と時刻を入力
+            self._input_date_time(file_date_str, file_time_str)
             
-            # 入力処理後の値をログ出力（DEBUGレベルに変更）
+            # 入力処理後の値をログ出力
             try:
                 year_val = self.driver.find_element(By.CSS_SELECTOR, ".year.date-piece input[name='year']").get_attribute("value")
                 month_val = self.driver.find_element(By.CSS_SELECTOR, ".month.date-piece input[name='month']").get_attribute("value")
@@ -164,7 +181,13 @@ class PhotoProcessor:
                 logger.debug(f" → 入力後の値の取得に失敗: {e}")
             
             # 保存
-            return self._save_date_time()
+            result = self._save_date_time()
+            if result:
+                if is_date_set:
+                    logger.info(" → 撮影日時を更新しました。")
+                else:
+                    logger.info(" → 撮影日時を新規設定しました。")
+            return result
             
         except Exception as e:
             logger.error(f" → 撮影日設定中のエラー: {type(e).__name__}: {e}")
@@ -199,16 +222,38 @@ class PhotoProcessor:
     
     def _is_date_already_set(self):
         """
-        すでに撮影日が設定されているか確認
+        撮影日が設定されているか確認し、設定されている場合は
+        現在設定されている日付と時刻を取得する
         
         Returns:
-            bool: 設定済みの場合はTrue
+            tuple: (is_set, date_str, time_str)
+                is_set: 設定済みの場合はTrue
+                date_str: 設定されている日付 (例: "2025-05-15")
+                time_str: 設定されている時間 (例: "午後9時10分")
         """
         try:
-            existing = self.driver.find_element(By.CSS_SELECTOR, ".detail-item.date-info h4 button.edit-btn")
-            return "編集" in existing.text
-        except:
-            return False
+            edit_btn = self.driver.find_element(By.CSS_SELECTOR, ".detail-item.date-info h4 button.edit-btn")
+            if "編集" in edit_btn.text:
+                # 日付要素と時刻要素を取得
+                date_label = self.driver.find_element(By.CSS_SELECTOR, ".detail-item.date-info .label").text
+                time_span = self.driver.find_element(By.CSS_SELECTOR, ".detail-item.date-info .subs span").text
+                
+                # フォーマット変換 (例: "2025年5月15日" -> "2025-05-15")
+                date_match = re.search(r"(\d{4})年(\d{1,2})月(\d{1,2})日", date_label)
+                if date_match:
+                    year, month, day = date_match.groups()
+                    month = month.zfill(2)  # 1桁の月を2桁に
+                    day = day.zfill(2)      # 1桁の日を2桁に
+                    date_str = f"{year}-{month}-{day}"
+                    
+                    # 時刻はそのまま使用 (例: "午後9時10分")
+                    time_str = re.sub(r"^.*?, ", "", time_span)  # "木曜日, 午後9時10分" -> "午後9時10分"
+                    
+                    return True, date_str, time_str
+        except Exception as e:
+            logger.debug(f" → 日付情報の解析エラー: {e}")
+        
+        return False, None, None
     
     def _get_filename(self):
         """

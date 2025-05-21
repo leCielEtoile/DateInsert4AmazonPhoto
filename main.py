@@ -120,10 +120,10 @@ def main():
                 break
             
             # 各写真に対して処理
-            updated_any = processor.process_photos(photo_links)
+            needs_more_processing = processor.process_photos(photo_links)
             
-            if not updated_any:
-                logger.info("未設定の写真がありません。終了します。")
+            if not needs_more_processing:
+                logger.info("すべての写真が正しく設定されました。終了します。")
                 break
             
             logger.info("ページを再読み込みします。")
