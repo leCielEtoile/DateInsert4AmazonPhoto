@@ -8,6 +8,7 @@ driver_manager.py - WebDriverの管理とブラウザ操作
 """
 
 import os
+import sys
 import time
 import io
 import zipfile
@@ -21,22 +22,48 @@ from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import TimeoutException, WebDriverException
 
 from modules.logger import setup_logger
+from modules.utils import error_and_exit
 from modules.version import __version__
 
 logger = setup_logger()
 
-def error_and_exit(message):
-    """
-    致命的なエラーをログに記録して、スクリプトを終了する。
-    """
-    logger.error(message)
-    exit(1)
-
 class DriverManager:
     """WebDriverを管理し、ブラウザ操作の共通機能を提供するクラス"""
+    
+    # ブラウザの標準インストールパス
+    BROWSER_PATHS = {
+        "firefox": {
+            "windows": [
+                r"C:\Program Files\Mozilla Firefox\firefox.exe",
+                r"C:\Program Files (x86)\Mozilla Firefox\firefox.exe",
+            ],
+            "darwin": [  # macOS
+                "/Applications/Firefox.app/Contents/MacOS/firefox",
+                f"{os.path.expanduser('~')}/Applications/Firefox.app/Contents/MacOS/firefox"
+            ],
+            "linux": [
+                "/usr/bin/firefox",
+                "/usr/local/bin/firefox"
+            ]
+        },
+        "chrome": {
+            "windows": [
+                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            ],
+            "darwin": [  # macOS
+                "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                f"{os.path.expanduser('~')}/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+            ],
+            "linux": [
+                "/usr/bin/google-chrome",
+                "/usr/local/bin/google-chrome"
+            ]
+        }
+    }
     
     def __init__(self, browser_type, browser_path, profile_path, driver_path):
         """
@@ -54,14 +81,46 @@ class DriverManager:
         self.driver_path = driver_path
         self.driver = None
         
+        # ブラウザタイプの検証
+        if self.browser_type not in ["firefox", "chrome"]:
+            error_and_exit(f"未対応のブラウザタイプ: {self.browser_type}", logger)
+        
         # ドライバーディレクトリの作成
         driver_dir = os.path.dirname(driver_path)
-        if not os.path.exists(driver_dir):
+        if driver_dir and not os.path.exists(driver_dir):
             os.makedirs(driver_dir, exist_ok=True)
+        
+        # ブラウザパスの自動検出（必要な場合）
+        if not os.path.isfile(self.browser_path):
+            self._detect_browser_path()
         
         # ドライバーの存在チェック
         if not os.path.exists(driver_path):
             self._download_driver()
+    
+    def _detect_browser_path(self):
+        """
+        OS に応じてブラウザのパスを自動検出する
+        """
+        platform = sys.platform
+        if platform.startswith('win'):
+            platform_key = 'windows'
+        elif platform.startswith('darwin'):
+            platform_key = 'darwin'
+        else:
+            platform_key = 'linux'
+        
+        # 対応するプラットフォームのパスリストを取得
+        path_list = self.BROWSER_PATHS.get(self.browser_type, {}).get(platform_key, [])
+        
+        for path in path_list:
+            if os.path.isfile(path):
+                self.browser_path = path
+                logger.info(f"{self.browser_type.capitalize()}実行ファイルを自動検出しました: {self.browser_path}")
+                return
+        
+        # 見つからない場合はエラー
+        error_and_exit(f"{self.browser_type.capitalize()}実行ファイルが見つかりません", logger)
     
     def _download_driver(self):
         """
@@ -71,8 +130,6 @@ class DriverManager:
             self._download_geckodriver()
         elif self.browser_type == "chrome":
             self._download_chromedriver()
-        else:
-            error_and_exit(f"未対応のブラウザタイプ: {self.browser_type}")
     
     def _download_geckodriver(self):
         """
@@ -92,8 +149,16 @@ class DriverManager:
             res.raise_for_status()
             assets = res.json().get('assets', [])
             
-            # Windows 64bit 用の zip ファイルを探す
-            asset_url = next((a['browser_download_url'] for a in assets if 'win64.zip' in a['name']), None)
+            # OSに合わせたzipファイルを探す
+            platform_tag = ""
+            if sys.platform.startswith('win'):
+                platform_tag = 'win64.zip'
+            elif sys.platform.startswith('darwin'):
+                platform_tag = 'macos'
+            else:
+                platform_tag = 'linux64'
+            
+            asset_url = next((a['browser_download_url'] for a in assets if platform_tag in a['name']), None)
             if not asset_url:
                 # フォールバック: 直接特定バージョンを指定してダウンロード
                 fallback_version = "v0.33.0"
@@ -103,10 +168,11 @@ class DriverManager:
                 return
                 
             logger.info(f"GeckoDriver最新バージョンをダウンロードします: {asset_url}")
-            self._download_and_extract(asset_url, 'geckodriver.exe', headers)
+            exe_name = 'geckodriver.exe' if sys.platform.startswith('win') else 'geckodriver'
+            self._download_and_extract(asset_url, exe_name, headers)
             
         except Exception as e:
-            error_and_exit(f"Geckodriver のダウンロードに失敗しました: {e}")
+            error_and_exit(f"Geckodriver のダウンロードに失敗しました: {str(e)}", logger)
     
     def _download_chromedriver(self):
         """
@@ -115,18 +181,27 @@ class DriverManager:
         logger.info('chromedriver.exe が見つかりません。最新バージョンをダウンロードします...')
         
         try:
-            # Chrome のバージョンを確認する方法をここに実装する必要がある
-            # 現在は最新の安定版をダウンロードするシンプルな実装
+            # 最新バージョンを取得
             url = "https://chromedriver.storage.googleapis.com/LATEST_RELEASE"
             version = requests.get(url).text.strip()
             
-            download_url = f"https://chromedriver.storage.googleapis.com/{version}/chromedriver_win32.zip"
+            # OSに合わせたzipファイルを選択
+            zip_suffix = ""
+            if sys.platform.startswith('win'):
+                zip_suffix = "win32"
+            elif sys.platform.startswith('darwin'):
+                zip_suffix = "mac64"
+            else:  # Linux
+                zip_suffix = "linux64"
+            
+            download_url = f"https://chromedriver.storage.googleapis.com/{version}/chromedriver_{zip_suffix}.zip"
             headers = {"User-Agent": f"DateInsert4AmazonPhoto/{__version__}"}
             
-            self._download_and_extract(download_url, 'chromedriver.exe', headers)
+            exe_name = 'chromedriver.exe' if sys.platform.startswith('win') else 'chromedriver'
+            self._download_and_extract(download_url, exe_name, headers)
             
         except Exception as e:
-            error_and_exit(f"Chromedriver のダウンロードに失敗しました: {e}")
+            error_and_exit(f"Chromedriver のダウンロードに失敗しました: {str(e)}", logger)
     
     def _download_and_extract(self, url, exe_name, headers):
         """
@@ -154,17 +229,28 @@ class DriverManager:
         buffer.seek(0)
         with zipfile.ZipFile(buffer) as zip_file:
             files = zip_file.namelist()
-            driver_file = next((f for f in files if f.endswith(exe_name)), None)
-            if driver_file:
-                zip_file.extract(driver_file, path=dest_dir)
-                # ネストされたパスの場合は移動
-                if driver_file != exe_name:
-                    os.rename(
-                        os.path.join(dest_dir, driver_file),
-                        os.path.join(dest_dir, exe_name)
-                    )
-            else:
-                raise RuntimeError(f"{exe_name} が見つかりませんでした。")
+            
+            # exe_nameに一致または終わるファイルを探す
+            driver_file = None
+            for file in files:
+                if file.endswith(exe_name) or file == exe_name:
+                    driver_file = file
+                    break
+                    
+            if not driver_file:
+                raise RuntimeError(f"{exe_name} が見つかりませんでした。利用可能なファイル: {', '.join(files)}")
+            
+            zip_file.extract(driver_file, path=dest_dir)
+            
+            # ネストされたパスの場合は移動
+            extracted_path = os.path.join(dest_dir, driver_file)
+            target_path = os.path.join(dest_dir, exe_name)
+            if extracted_path != target_path:
+                os.rename(extracted_path, target_path)
+            
+            # 実行権限を付与 (Linux/Mac)
+            if not sys.platform.startswith('win'):
+                os.chmod(target_path, 0o755)
         
         logger.info(f'{exe_name} を {dest_dir} に保存しました。')
     
@@ -175,67 +261,74 @@ class DriverManager:
         Returns:
             webdriver: 初期化されたWebDriverインスタンス
         """
-        if self.browser_type == "firefox":
-            options = FirefoxOptions()
-            options.binary_location = self.browser_path
+        try:
+            if self.browser_type == "firefox":
+                self.driver = self._start_firefox()
+            elif self.browser_type == "chrome":
+                self.driver = self._start_chrome()
+                
+            return self.driver
             
-            # Firefox profileのパスを設定
-            if os.path.isdir(self.profile_path):
-                options.profile = self.profile_path
-            
-            # GeckoDriverを明示的に設定
-            if not os.path.exists(self.driver_path):
-                logger.warning(f"指定されたドライバパスが存在しません: {self.driver_path}")
-                self._download_driver()
-            
-            # SeleniumのSystemPathに追加
-            driver_dir = os.path.dirname(os.path.abspath(self.driver_path))
-            os.environ["PATH"] = f"{driver_dir}{os.pathsep}{os.environ.get('PATH', '')}"
-            
-            service = FirefoxService(executable_path=self.driver_path)
-            try:
-                logger.info(f"Firefoxを起動します。ドライバパス: {self.driver_path}")
-                self.driver = webdriver.Firefox(service=service, options=options)
-                logger.info("Firefox WebDriverの起動に成功しました。")
-            except Exception as e:
-                error_and_exit(f"Firefox WebDriver の起動に失敗: {str(e)}")
-        
-        elif self.browser_type == "chrome":
-            options = ChromeOptions()
-            options.binary_location = self.browser_path
-            options.add_argument(f"user-data-dir={self.profile_path}")
-            
-            # ChromeDriverを明示的に設定
-            if not os.path.exists(self.driver_path):
-                logger.warning(f"指定されたドライバパスが存在しません: {self.driver_path}")
-                self._download_driver()
-            
-            # SeleniumのSystemPathに追加
-            driver_dir = os.path.dirname(os.path.abspath(self.driver_path))
-            os.environ["PATH"] = f"{driver_dir}{os.pathsep}{os.environ.get('PATH', '')}"
-            
-            service = ChromeService(executable_path=self.driver_path)
-            try:
-                logger.info(f"Chromeを起動します。ドライバパス: {self.driver_path}")
-                self.driver = webdriver.Chrome(service=service, options=options)
-                logger.info("Chrome WebDriverの起動に成功しました。")
-            except Exception as e:
-                error_and_exit(f"Chrome WebDriver の起動に失敗: {str(e)}")
-        
-        else:
-            error_and_exit(f"未対応のブラウザタイプ: {self.browser_type}")
-        
-        return self.driver
+        except WebDriverException as e:
+            error_and_exit(f"{self.browser_type.capitalize()} WebDriver の起動に失敗: {str(e)}", logger)
     
-    def wait_for_element(self, by, selector, timeout=10, polling=0.5):
+    def _start_firefox(self):
         """
-        指定したセレクタに一致する要素が表示されるまで待機
+        Firefoxブラウザを起動する
+        
+        Returns:
+            WebDriver: Firefox WebDriverインスタンス
+        """
+        options = FirefoxOptions()
+        options.binary_location = self.browser_path
+        
+        # Firefox profileのパスを設定
+        if os.path.isdir(self.profile_path):
+            options.profile = self.profile_path
+        
+        # SeleniumのSystemPathに追加
+        driver_dir = os.path.dirname(os.path.abspath(self.driver_path))
+        os.environ["PATH"] = f"{driver_dir}{os.pathsep}{os.environ.get('PATH', '')}"
+        
+        service = FirefoxService(executable_path=self.driver_path)
+        logger.info(f"Firefoxを起動します。ドライバパス: {self.driver_path}")
+        driver = webdriver.Firefox(service=service, options=options)
+        logger.info("Firefox WebDriverの起動に成功しました。")
+        return driver
+    
+    def _start_chrome(self):
+        """
+        Chromeブラウザを起動する
+        
+        Returns:
+            WebDriver: Chrome WebDriverインスタンス
+        """
+        options = ChromeOptions()
+        options.binary_location = self.browser_path
+        
+        # プロファイルパスを設定
+        if os.path.isdir(self.profile_path):
+            options.add_argument(f"user-data-dir={self.profile_path}")
+        
+        # SeleniumのSystemPathに追加
+        driver_dir = os.path.dirname(os.path.abspath(self.driver_path))
+        os.environ["PATH"] = f"{driver_dir}{os.pathsep}{os.environ.get('PATH', '')}"
+        
+        service = ChromeService(executable_path=self.driver_path)
+        logger.info(f"Chromeを起動します。ドライバパス: {self.driver_path}")
+        driver = webdriver.Chrome(service=service, options=options)
+        logger.info("Chrome WebDriverの起動に成功しました。")
+        return driver
+    
+    def wait_for_element(self, by, selector, timeout=10, condition=EC.presence_of_element_located):
+        """
+        指定した条件に一致する要素が表示されるまで待機
         
         Args:
             by: 検索方法（By.ID, By.CSS_SELECTOR など）
             selector: 検索するセレクタ
             timeout: タイムアウト時間（秒）
-            polling: ポーリング間隔（秒）
+            condition: 待機条件 (例: presence_of_element_located, visibility_of_element_located)
             
         Returns:
             見つかった要素。見つからなければ None
@@ -244,10 +337,11 @@ class DriverManager:
             return None
             
         try:
-            return WebDriverWait(self.driver, timeout, poll_frequency=polling).until(
-                EC.presence_of_element_located((by, selector))
+            return WebDriverWait(self.driver, timeout).until(
+                condition((by, selector))
             )
         except TimeoutException:
+            logger.debug(f"要素が見つかりませんでした: {by}={selector}")
             return None
     
     def quit_browser(self):
@@ -257,6 +351,7 @@ class DriverManager:
         if self.driver:
             try:
                 self.driver.quit()
+                logger.debug("ブラウザを正常に終了しました。")
             except Exception as e:
                 logger.warning(f"ブラウザ終了時にエラーが発生: {e}")
             finally:

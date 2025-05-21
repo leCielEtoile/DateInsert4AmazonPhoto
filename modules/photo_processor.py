@@ -11,6 +11,8 @@ photo_processor.py - Amazon Photos上の写真を処理するモジュール
 import re
 import time
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
 from modules.logger import setup_logger
 from modules import load_config
 
@@ -18,6 +20,22 @@ logger = setup_logger()
 
 class PhotoProcessor:
     """Amazon Photos上の写真を処理するクラス"""
+    
+    # セレクタの一元管理（変更されやすい箇所）
+    SELECTORS = {
+        'photo_links': '.mosaic-item a',
+        'info_button': 'button.info',
+        'edit_button': '.detail-item.date-info h4 button.edit-btn',
+        'date_label': '.detail-item.date-info .label',
+        'time_span': '.detail-item.date-info .subs span',
+        'file_info': '.detail-item.file-info .label',
+        'add_date_button': '.info-item.editable .edit-btn',
+        'year_field': '.year.date-piece input[name="year"]',
+        'month_field': '.month.date-piece input[name="month"]',
+        'day_field': '.day.date-piece input[name="day"]',
+        'time_field': '.hour-minute.date-piece input[name="time"]',
+        'save_button': 'button.button[aria-label="保存"]'
+    }
     
     def __init__(self, driver):
         """
@@ -38,7 +56,7 @@ class PhotoProcessor:
         Returns:
             list: 写真リンク要素のリスト
         """
-        return self.driver.find_elements(By.CSS_SELECTOR, ".mosaic-item a")
+        return self.driver.find_elements(By.CSS_SELECTOR, self.SELECTORS['photo_links'])
     
     def process_photos(self, photo_links):
         """
@@ -57,28 +75,39 @@ class PhotoProcessor:
         all_processed = True  # すべての写真が正しく処理された場合True
         
         for i, link in enumerate(photo_links):
-            url = link.get_attribute("href")
-            if not url:
-                continue
-                
-            logger.info(f"[{i + 1}] 写真詳細ページを処理中: {url}")
-            
-            # 新しいタブで開く
-            self.driver.execute_script("window.open(arguments[0]);", url)
-            self.driver.switch_to.window(self.driver.window_handles[1])
-            time.sleep(1)
-            
             try:
-                # 写真の処理が必要だった場合（設定されていないか、不正確な場合）
-                if self.set_shooting_date():
-                    all_processed = False  # まだ処理が必要な写真がある
-            except Exception as e:
-                logger.error(f"写真処理中にエラー発生: {type(e).__name__}: {e}")
-                all_processed = False  # エラーが発生したので再処理の可能性あり
+                url = link.get_attribute("href")
+                if not url:
+                    continue
+                    
+                logger.info(f"[{i + 1}/{len(photo_links)}] 写真詳細ページを処理中: {url}")
                 
-            # タブを閉じてメインタブに戻る
-            self.driver.close()
-            self.driver.switch_to.window(self.driver.window_handles[0])
+                # 新しいタブで開く
+                self.driver.execute_script("window.open(arguments[0]);", url)
+                self.driver.switch_to.window(self.driver.window_handles[1])
+                time.sleep(1)
+                
+                try:
+                    # 写真の処理が必要だった場合（設定されていないか、不正確な場合）
+                    if self.set_shooting_date():
+                        all_processed = False  # まだ処理が必要な写真がある
+                except Exception as e:
+                    logger.error(f"写真処理中にエラー発生: {type(e).__name__}: {e}")
+                    all_processed = False  # エラーが発生したので再処理の可能性あり
+                    
+            except (StaleElementReferenceException, NoSuchElementException) as e:
+                logger.warning(f"要素にアクセスできません: {e}")
+                all_processed = False
+            finally:
+                # タブを閉じてメインタブに戻る
+                try:
+                    self.driver.close()
+                    self.driver.switch_to.window(self.driver.window_handles[0])
+                except Exception as e:
+                    logger.error(f"タブ操作中にエラー: {e}")
+                    # ブラウザを回復させる試み
+                    if len(self.driver.window_handles) > 0:
+                        self.driver.switch_to.window(self.driver.window_handles[0])
         
         # 戻り値を逆にする - まだ処理が必要な写真があるかどうか
         return not all_processed
@@ -98,15 +127,31 @@ class PhotoProcessor:
         if not match:
             return None, None
             
-        year, month, day, hour, minute, _ = match.groups()
-        hour = int(hour)
-        minute = int(minute)
+        # すべての値を取得 (year, month, day, hour, minute, second)
+        groups = match.groups()
+        if len(groups) < 6:
+            logger.warning("ファイル名のパターンが期待する形式と一致しません。少なくとも6つのグループが必要です。")
+            return None, None
+            
+        year, month, day, hour, minute, _ = groups
         
-        # 午前/午後表記
-        time_str = f"{'午前' if hour < 12 else '午後'}{hour % 12 if hour % 12 != 0 else 12}時{minute}分"
-        
-        # ログ出力は行わない（set_shooting_date側で出力する）
-        return f"{year}-{month}-{day}", time_str
+        try:
+            hour_int = int(hour)
+            minute_int = int(minute)
+            
+            # 午前/午後表記
+            am_pm = '午前' if hour_int < 12 else '午後'
+            hour_12 = hour_int % 12
+            if hour_12 == 0:
+                hour_12 = 12
+                
+            time_str = f"{am_pm}{hour_12}時{minute_int}分"
+            date_str = f"{year}-{month}-{day}"
+            
+            return date_str, time_str
+        except ValueError as e:
+            logger.warning(f"日付/時間の変換エラー: {e}")
+            return None, None
     
     def set_shooting_date(self):
         """
@@ -117,10 +162,13 @@ class PhotoProcessor:
         """
         try:
             # 情報パネルを開く
-            info_button = self._wait_for_element(By.CSS_SELECTOR, "button.info")
+            info_button = self._wait_for_element(By.CSS_SELECTOR, self.SELECTORS['info_button'])
             if info_button:
                 info_button.click()
                 logger.debug(" → 情報パネルを開きました。")
+            else:
+                logger.warning(" → 情報ボタンが見つかりません。")
+                return False
             
             # ファイル名取得
             filename = self._get_filename()
@@ -148,7 +196,7 @@ class PhotoProcessor:
                 else:
                     logger.info(" → 撮影日時が異なります。更新します。")
                     # 編集ボタンをクリック
-                    edit_btn = self.driver.find_element(By.CSS_SELECTOR, ".detail-item.date-info h4 button.edit-btn")
+                    edit_btn = self.driver.find_element(By.CSS_SELECTOR, self.SELECTORS['edit_button'])
                     edit_btn.click()
                     logger.debug(" → 日付編集ダイアログを開きました。")
             else:
@@ -157,28 +205,9 @@ class PhotoProcessor:
                 if not self._open_date_form():
                     return False
             
-            # 入力処理前の値をログ出力
-            try:
-                year_val = self.driver.find_element(By.CSS_SELECTOR, ".year.date-piece input[name='year']").get_attribute("value")
-                month_val = self.driver.find_element(By.CSS_SELECTOR, ".month.date-piece input[name='month']").get_attribute("value")
-                day_val = self.driver.find_element(By.CSS_SELECTOR, ".day.date-piece input[name='day']").get_attribute("value")
-                time_val = self.driver.find_element(By.CSS_SELECTOR, ".hour-minute.date-piece input[name='time']").get_attribute("value")
-                logger.debug(f" → 入力前の値: 年={year_val}, 月={month_val}, 日={day_val}, 時間={time_val}")
-            except Exception as e:
-                logger.debug(f" → 入力前の値の取得に失敗: {e}")
-            
             # 日付と時刻を入力
-            self._input_date_time(file_date_str, file_time_str)
-            
-            # 入力処理後の値をログ出力
-            try:
-                year_val = self.driver.find_element(By.CSS_SELECTOR, ".year.date-piece input[name='year']").get_attribute("value")
-                month_val = self.driver.find_element(By.CSS_SELECTOR, ".month.date-piece input[name='month']").get_attribute("value")
-                day_val = self.driver.find_element(By.CSS_SELECTOR, ".day.date-piece input[name='day']").get_attribute("value")
-                time_val = self.driver.find_element(By.CSS_SELECTOR, ".hour-minute.date-piece input[name='time']").get_attribute("value")
-                logger.debug(f" → 入力後の値: 年={year_val}, 月={month_val}, 日={day_val}, 時間={time_val}")
-            except Exception as e:
-                logger.debug(f" → 入力後の値の取得に失敗: {e}")
+            if not self._input_date_time(file_date_str, file_time_str):
+                return False
             
             # 保存
             result = self._save_date_time()
@@ -193,31 +222,33 @@ class PhotoProcessor:
             logger.error(f" → 撮影日設定中のエラー: {type(e).__name__}: {e}")
             return False
     
-    def _wait_for_element(self, by, selector, timeout=10):
+    def _wait_for_element(self, by, selector, timeout=10, condition=EC.presence_of_element_located):
         """
-        要素が現れるのを待機
+        指定した条件に一致する要素が現れるまで待機
         
         Args:
             by: 検索方法
             selector: セレクタ
             timeout: タイムアウト時間
+            condition: 待機条件
             
         Returns:
             見つかった要素。見つからなければNone
         """
-        for delay in [1, 2, 3, 5, 10]:
-            if delay > timeout:
-                break
-                
+        if hasattr(self.driver, 'wait_for_element'):
+            # DriverManagerのメソッドを使用
+            return self.driver.wait_for_element(by, selector, timeout, condition)
+        
+        # 従来のポーリング方式（互換性のため）
+        end_time = time.time() + timeout
+        while time.time() < end_time:
             try:
                 element = self.driver.find_element(by, selector)
                 if element.is_displayed():
                     return element
             except:
                 pass
-                
-            time.sleep(1)
-            
+            time.sleep(0.5)
         return None
     
     def _is_date_already_set(self):
@@ -232,11 +263,11 @@ class PhotoProcessor:
                 time_str: 設定されている時間 (例: "午後9時10分")
         """
         try:
-            edit_btn = self.driver.find_element(By.CSS_SELECTOR, ".detail-item.date-info h4 button.edit-btn")
+            edit_btn = self.driver.find_element(By.CSS_SELECTOR, self.SELECTORS['edit_button'])
             if "編集" in edit_btn.text:
                 # 日付要素と時刻要素を取得
-                date_label = self.driver.find_element(By.CSS_SELECTOR, ".detail-item.date-info .label").text
-                time_span = self.driver.find_element(By.CSS_SELECTOR, ".detail-item.date-info .subs span").text
+                date_label = self.driver.find_element(By.CSS_SELECTOR, self.SELECTORS['date_label']).text
+                time_span = self.driver.find_element(By.CSS_SELECTOR, self.SELECTORS['time_span']).text
                 
                 # フォーマット変換 (例: "2025年5月15日" -> "2025-05-15")
                 date_match = re.search(r"(\d{4})年(\d{1,2})月(\d{1,2})日", date_label)
@@ -262,7 +293,7 @@ class PhotoProcessor:
         Returns:
             str: ファイル名。取得できない場合はNone
         """
-        file_elem = self._wait_for_element(By.CSS_SELECTOR, ".detail-item.file-info .label")
+        file_elem = self._wait_for_element(By.CSS_SELECTOR, self.SELECTORS['file_info'])
         if not file_elem:
             logger.warning(" → ファイル名要素が見つかりません。")
             return None
@@ -279,13 +310,17 @@ class PhotoProcessor:
             bool: 成功した場合はTrue
         """
         try:
-            add_btn = self.driver.find_element(By.CSS_SELECTOR, ".info-item.editable .edit-btn")
+            add_btn = self.driver.find_element(By.CSS_SELECTOR, self.SELECTORS['add_date_button'])
             if "日付と時刻を追加" in add_btn.text:
                 add_btn.click()
                 logger.debug(" → 日付追加ボタンをクリックしました。")
+                # ダイアログが表示されるまで短時間待機
+                time.sleep(0.5)
                 return True
-        except Exception:
-            logger.warning(" → 日付追加ボタンが見つかりませんでした。スキップ。")
+        except NoSuchElementException:
+            logger.warning(" → 日付追加ボタンが見つかりませんでした。")
+        except Exception as e:
+            logger.warning(f" → 日付追加ボタンのクリック中にエラー: {e}")
             
         return False
     
@@ -296,31 +331,51 @@ class PhotoProcessor:
         Args:
             date_str (str): 日付文字列（YYYY-MM-DD）
             time_str (str): 時刻文字列（例: 午後2時5分）
+            
+        Returns:
+            bool: 入力に成功した場合はTrue
         """
-        # 日付をパースする
-        year, month, day = date_str.split("-")
-        
-        # 各フィールドに入力前にクリアする
-        year_field = self._wait_for_element(By.CSS_SELECTOR, ".year.date-piece input[name='year']")
-        month_field = self.driver.find_element(By.CSS_SELECTOR, ".month.date-piece input[name='month']")
-        day_field = self.driver.find_element(By.CSS_SELECTOR, ".day.date-piece input[name='day']")
-        time_field = self.driver.find_element(By.CSS_SELECTOR, ".hour-minute.date-piece input[name='time']")
-        
-        # フィールドをクリア
-        year_field.clear()
-        month_field.clear()
-        day_field.clear()
-        time_field.clear()
-        
-        # 各フィールドに入力
-        year_field.send_keys(year)
-        month_field.send_keys(month)
-        day_field.send_keys(day)
-        time_field.send_keys(time_str)
-        
-        # 念のため日付確定のために、日付の選択後に別の要素にフォーカスを移す
-        self.driver.execute_script("arguments[0].blur();", time_field)
-        time.sleep(1)  # 変更が適用されるための短い待機時間
+        try:
+            # 日付をパースする
+            year, month, day = date_str.split("-")
+            
+            # 各フィールドを取得
+            year_field = self._wait_for_element(
+                By.CSS_SELECTOR, 
+                self.SELECTORS['year_field'],
+                condition=EC.visibility_of_element_located
+            )
+            
+            if not year_field:
+                logger.warning(" → 入力フォームが見つかりません。")
+                return False
+                
+            month_field = self.driver.find_element(By.CSS_SELECTOR, self.SELECTORS['month_field'])
+            day_field = self.driver.find_element(By.CSS_SELECTOR, self.SELECTORS['day_field'])
+            time_field = self.driver.find_element(By.CSS_SELECTOR, self.SELECTORS['time_field'])
+            
+            # フィールドをクリア
+            year_field.clear()
+            month_field.clear()
+            day_field.clear()
+            time_field.clear()
+            
+            # 各フィールドに入力
+            year_field.send_keys(year)
+            month_field.send_keys(month)
+            day_field.send_keys(day)
+            time_field.send_keys(time_str)
+            
+            # 念のため日付確定のために、日付の選択後に別の要素にフォーカスを移す
+            self.driver.execute_script("arguments[0].blur();", time_field)
+            # 変更が適用されるための短い待機時間
+            time.sleep(1)
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f" → 日付入力中にエラー: {e}")
+            return False
     
     def _save_date_time(self):
         """
@@ -329,12 +384,22 @@ class PhotoProcessor:
         Returns:
             bool: 保存に成功した場合はTrue
         """
-        save_btn = self._wait_for_element(By.CSS_SELECTOR, "button.button[aria-label='保存']")
-        if save_btn:
-            save_btn.click()
-            logger.info(" → 撮影日時を保存しました。")
-            time.sleep(2)
-            return True
+        save_btn = self._wait_for_element(
+            By.CSS_SELECTOR, 
+            self.SELECTORS['save_button'],
+            condition=EC.element_to_be_clickable
+        )
         
-        logger.warning(" → 保存ボタンが見つかりません。")
+        if save_btn:
+            try:
+                save_btn.click()
+                # 保存が完了するまで待機
+                time.sleep(2)
+                logger.info(" → 撮影日時を保存しました。")
+                return True
+            except Exception as e:
+                logger.error(f" → 保存ボタンのクリック中にエラー: {e}")
+        else:
+            logger.warning(" → 保存ボタンが見つかりません。")
+            
         return False
