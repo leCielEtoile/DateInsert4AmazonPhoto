@@ -11,14 +11,16 @@ import os
 import logging
 from datetime import datetime
 
-def setup_logger(name="DateInsert4AmazonPhoto", log_file="logs/app.log"):
+def setup_logger(name="DateInsert4AmazonPhoto", log_file="logs/app.log", console_level=logging.INFO, file_level=logging.DEBUG):
     """
     カスタムロガーを初期化し、StreamHandler（カラー付き）と
     FileHandler（log_file）を設定して返す。
 
     Args:
         name (str): ロガー名
-        log_file (str): ログファイルのパス
+        log_file (str): ログファイルのパス（省略時は logs/app.log）
+        console_level: コンソール出力のログレベル
+        file_level: ファイル出力のログレベル
 
     Returns:
         logging.Logger: 設定済みのロガーオブジェクト
@@ -29,7 +31,7 @@ def setup_logger(name="DateInsert4AmazonPhoto", log_file="logs/app.log"):
     if logger.hasHandlers():
         return logger
 
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.DEBUG)  # 最も低いレベルに設定
 
     # ログのフォーマット
     log_format = "%(levelname)-9s %(asctime)s [%(filename)s:%(lineno)d] %(message)s"
@@ -54,7 +56,7 @@ def setup_logger(name="DateInsert4AmazonPhoto", log_file="logs/app.log"):
 
     # コンソール用ハンドラ（色付き）
     st_handler = logging.StreamHandler()
-    st_handler.setLevel(logging.DEBUG)
+    st_handler.setLevel(console_level)
     st_handler.setFormatter(ColorFormatter(log_format))
 
     # ログディレクトリの作成
@@ -64,7 +66,7 @@ def setup_logger(name="DateInsert4AmazonPhoto", log_file="logs/app.log"):
 
     # ファイル用ハンドラ
     fl_handler = logging.FileHandler(filename=log_file, encoding="utf-8")
-    fl_handler.setLevel(logging.DEBUG)
+    fl_handler.setLevel(file_level)
     fl_handler.setFormatter(logging.Formatter(log_format))
 
     # ハンドラ登録

@@ -16,11 +16,27 @@ main.py - Amazon Photos 上の VRChat スクリーンショットに対して、
 import os
 import re
 import time
+import logging
 from modules import setup_logger, load_config, error_and_exit, __version__
 from modules.driver_manager import DriverManager
 from modules.photo_processor import PhotoProcessor
 
-logger = setup_logger()
+# 設定ファイルの読み込み
+config = load_config()
+
+# ログレベルの取得と変換
+log_levels = {
+    "DEBUG": logging.DEBUG,
+    "INFO": logging.INFO,
+    "WARNING": logging.WARNING,
+    "ERROR": logging.ERROR,
+    "CRITICAL": logging.CRITICAL
+}
+console_level = log_levels.get(config.get("log_level_console", "INFO"), logging.INFO)
+file_level = log_levels.get(config.get("log_level_file", "DEBUG"), logging.DEBUG)
+
+# ロガー初期化
+logger = setup_logger(console_level=console_level, file_level=file_level)
 
 def main():
     """
@@ -28,9 +44,6 @@ def main():
     設定を読み込み、ブラウザを起動し、各画像に対して自動的に撮影日時を設定する。
     """
     logger.info(f"STARTUP - DateInsert4AmazonPhoto v{__version__}")
-    
-    # 設定ファイルの読み込み
-    config = load_config()
     
     # 初期設定値
     browser_type = config.get("browser_type", "firefox").lower()

@@ -24,7 +24,9 @@ DEFAULT_CONFIG = {
     "profile_path": "FirefoxPortable/Data/profile",
     "target_url": "https://www.amazon.co.jp/photos/all?timeYear=1000&lcf=time",
     "initial_wait": 5,
-    "filename_pattern": "VRChat_(\\d{4})-(\\d{2})-(\\d{2})_(\\d{2})-(\\d{2})-(\\d{2})"
+    "filename_pattern": "VRChat_(\\d{4})-(\\d{2})-(\\d{2})_(\\d{2})-(\\d{2})-(\\d{2})",
+    "log_level_console": "INFO",  # コンソールのログレベル
+    "log_level_file": "DEBUG"     # ファイルのログレベル
 }
 
 def error_and_exit(message):

@@ -100,6 +100,8 @@ class PhotoProcessor:
         
         # 午前/午後表記
         time_str = f"{'午前' if hour < 12 else '午後'}{hour % 12 if hour % 12 != 0 else 12}時{minute}分"
+        
+        # ログ出力は行わない（set_shooting_date側で出力する）
         return f"{year}-{month}-{day}", time_str
     
     def set_shooting_date(self):
@@ -114,7 +116,7 @@ class PhotoProcessor:
             info_button = self._wait_for_element(By.CSS_SELECTOR, "button.info")
             if info_button:
                 info_button.click()
-                logger.info(" → 情報パネルを開きました。")
+                logger.debug(" → 情報パネルを開きました。")
             
             # すでに撮影日があるか確認
             if self._is_date_already_set():
@@ -137,9 +139,29 @@ class PhotoProcessor:
             # 日付入力フォームを開く
             if not self._open_date_form():
                 return False
-                
+            
+            # 入力処理前の値をログ出力（DEBUGレベルに変更）
+            try:
+                year_val = self.driver.find_element(By.CSS_SELECTOR, ".year.date-piece input[name='year']").get_attribute("value")
+                month_val = self.driver.find_element(By.CSS_SELECTOR, ".month.date-piece input[name='month']").get_attribute("value")
+                day_val = self.driver.find_element(By.CSS_SELECTOR, ".day.date-piece input[name='day']").get_attribute("value")
+                time_val = self.driver.find_element(By.CSS_SELECTOR, ".hour-minute.date-piece input[name='time']").get_attribute("value")
+                logger.debug(f" → 入力前の値: 年={year_val}, 月={month_val}, 日={day_val}, 時間={time_val}")
+            except Exception as e:
+                logger.debug(f" → 入力前の値の取得に失敗: {e}")
+            
             # 入力処理
             self._input_date_time(date_str, time_str)
+            
+            # 入力処理後の値をログ出力（DEBUGレベルに変更）
+            try:
+                year_val = self.driver.find_element(By.CSS_SELECTOR, ".year.date-piece input[name='year']").get_attribute("value")
+                month_val = self.driver.find_element(By.CSS_SELECTOR, ".month.date-piece input[name='month']").get_attribute("value")
+                day_val = self.driver.find_element(By.CSS_SELECTOR, ".day.date-piece input[name='day']").get_attribute("value")
+                time_val = self.driver.find_element(By.CSS_SELECTOR, ".hour-minute.date-piece input[name='time']").get_attribute("value")
+                logger.debug(f" → 入力後の値: 年={year_val}, 月={month_val}, 日={day_val}, 時間={time_val}")
+            except Exception as e:
+                logger.debug(f" → 入力後の値の取得に失敗: {e}")
             
             # 保存
             return self._save_date_time()
@@ -215,7 +237,7 @@ class PhotoProcessor:
             add_btn = self.driver.find_element(By.CSS_SELECTOR, ".info-item.editable .edit-btn")
             if "日付と時刻を追加" in add_btn.text:
                 add_btn.click()
-                logger.info(" → 日付追加ボタンをクリックしました。")
+                logger.debug(" → 日付追加ボタンをクリックしました。")
                 return True
         except Exception:
             logger.warning(" → 日付追加ボタンが見つかりませんでした。スキップ。")
@@ -230,13 +252,30 @@ class PhotoProcessor:
             date_str (str): 日付文字列（YYYY-MM-DD）
             time_str (str): 時刻文字列（例: 午後2時5分）
         """
+        # 日付をパースする
         year, month, day = date_str.split("-")
         
+        # 各フィールドに入力前にクリアする
+        year_field = self._wait_for_element(By.CSS_SELECTOR, ".year.date-piece input[name='year']")
+        month_field = self.driver.find_element(By.CSS_SELECTOR, ".month.date-piece input[name='month']")
+        day_field = self.driver.find_element(By.CSS_SELECTOR, ".day.date-piece input[name='day']")
+        time_field = self.driver.find_element(By.CSS_SELECTOR, ".hour-minute.date-piece input[name='time']")
+        
+        # フィールドをクリア
+        year_field.clear()
+        month_field.clear()
+        day_field.clear()
+        time_field.clear()
+        
         # 各フィールドに入力
-        self._wait_for_element(By.CSS_SELECTOR, ".year.date-piece input[name='year']").send_keys(year)
-        self.driver.find_element(By.CSS_SELECTOR, ".month.date-piece input[name='month']").send_keys(month)
-        self.driver.find_element(By.CSS_SELECTOR, ".day.date-piece input[name='day']").send_keys(day)
-        self.driver.find_element(By.CSS_SELECTOR, ".hour-minute.date-piece input[name='time']").send_keys(time_str)
+        year_field.send_keys(year)
+        month_field.send_keys(month)
+        day_field.send_keys(day)
+        time_field.send_keys(time_str)
+        
+        # 念のため日付確定のために、日付の選択後に別の要素にフォーカスを移す
+        self.driver.execute_script("arguments[0].blur();", time_field)
+        time.sleep(1)  # 変更が適用されるための短い待機時間
     
     def _save_date_time(self):
         """
