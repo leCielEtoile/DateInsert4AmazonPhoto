@@ -12,7 +12,7 @@ Amazon Photos にアップロードされた VRChat のスクリーンショッ�
 - Amazon Photos の写真詳細画面を自動操作
 - 撮影日および時刻を入力・保存
 - 既存の日時設定を自動比較し、必要に応じて修正
-- 設定ファイル (`config.json`) により環境をカスタマイズ可能
+- 設定ファイル (`config.yaml`) によりカスタマイズ可能
 - 詳細なログ出力（コンソールとファイル）による動作確認
 
 ---
@@ -48,27 +48,25 @@ DateInsert4AmazonPhoto/
 
 ##### 通常のFirefoxを使用する場合:
 
-- `DateInsert4AmazonPhoto.exe` を起動すると `config.json` が自動生成されます
+- `DateInsert4AmazonPhoto.exe` を起動すると `config.yaml` が自動生成されます
 - 以下のように設定を編集してください：
 
-```json
-{
-  "browser_type": "firefox",
-  "firefox_path": "インストールされている場所(デフォルトでは C:/Program Files/Mozilla Firefox/firefox.exe)",
-  "profile_path": "プロファイルが保存されている場所(デフォルトでは %APPDATA%/Mozilla/Firefox/Profiles )",
-}
+```yaml
+# ブラウザ設定
+browser_type: firefox  # 使用するブラウザ ('firefox' または 'chrome')
+firefox_path: C:/Program Files/Mozilla Firefox/firefox.exe  # Firefox実行ファイルのパス
+profile_path: C:/Users/ユーザー名/AppData/Roaming/Mozilla/Firefox/Profiles/xxxxx.default  # プロファイルフォルダ
 ```
 
 #### Chromeを使用する場合:
 
-- `config.json` で以下のように設定します：
+- `config.yaml` で以下のように設定します：
 
-```json
-{
-  "browser_type": "chrome",
-  "chrome_path": "C:/Program Files/Google/Chrome/Application/chrome.exe",
-  "profile_path": "Chromeのプロファイルフォルダ",
-}
+```yaml
+# ブラウザ設定
+browser_type: chrome  # 使用するブラウザ ('firefox' または 'chrome')
+chrome_path: C:/Program Files/Google/Chrome/Application/chrome.exe  # Chrome実行ファイルのパス
+profile_path: C:/Users/ユーザー名/AppData/Local/Google/Chrome/User Data/Default  # プロファイルフォルダ
 ```
 
 ### 2. Amazon Photos にログイン
@@ -88,23 +86,45 @@ DateInsert4AmazonPhoto/
 ---
 <br>
 
-## 🔧 config.json の設定項目
+## 🔧 config.yaml の設定項目
 
-```json
-{
-  "browser_type": "firefox",
-  "firefox_path": "FirefoxPortable/App/Firefox64/firefox.exe",
-  "firefox_driver_path": "drivers/geckodriver.exe",
-  "chrome_path": "C:/Program Files/Google/Chrome/Application/chrome.exe",
-  "chrome_driver_path": "drivers/chromedriver.exe",
-  "profile_path": "FirefoxPortable/Data/profile",
-  "target_url": "https://www.amazon.co.jp/photos/all?timeYear=1000&lcf=time",
-  "initial_wait": 5,
-  "filename_pattern": "VRChat_(\\d{4})-(\\d{2})-(\\d{2})_(\\d{2})-(\\d{2})-(\\d{2})",
-  "log_level_console": "INFO",
-  "log_level_file": "DEBUG",
-  "max_iterations": 1000
-}
+```yaml
+# DateInsert4AmazonPhoto 設定ファイル
+#
+# このファイルでは、アプリケーションの動作を制御するための設定を行います。
+# 各設定項目の説明は、項目の横のコメントを参照してください。
+
+#=====================================================================
+# ブラウザ設定
+#=====================================================================
+browser_type: firefox  # 使用するブラウザ ('firefox' または 'chrome')
+firefox_path: FirefoxPortable/App/Firefox64/firefox.exe  # Firefox実行ファイルのパス
+firefox_driver_path: drivers/geckodriver.exe  # GeckoDriverのパス（自動ダウンロード可能）
+chrome_path: C:/Program Files/Google/Chrome/Application/chrome.exe  # Chrome実行ファイルのパス
+chrome_driver_path: drivers/chromedriver.exe  # ChromeDriverのパス（自動ダウンロード可能）
+profile_path: FirefoxPortable/Data/profile  # ブラウザプロファイルのパス（ログイン情報など）
+
+#=====================================================================
+# Amazon Photos設定
+#=====================================================================
+target_url: https://www.amazon.co.jp/photos/all?timeYear=1000&lcf=time  # 接続先URL
+initial_wait: 5  # ページロード後の待機時間（秒）
+
+#=====================================================================
+# 写真処理設定
+#=====================================================================
+filename_pattern: 'VRChat_(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})'  # ファイル名から日時を抽出する正規表現パターン
+
+#=====================================================================
+# ログ設定
+#=====================================================================
+log_level_console: INFO  # コンソールに表示するログレベル (DEBUG/INFO/WARNING/ERROR/CRITICAL)
+log_level_file: DEBUG  # ファイルに記録するログレベル
+
+#=====================================================================
+# 実行制御
+#=====================================================================
+max_iterations: 1000  # 処理サイクルの最大数（無限ループ防止）
 ```
 
 | 項目名               | 説明 |
@@ -125,10 +145,21 @@ DateInsert4AmazonPhoto/
 ---
 <br>
 
+## 🔄 旧設定ファイル (config.json) からの移行
+
+バージョン1.3.0より、設定ファイル形式がJSONからYAMLに変更されました。古いconfigファイルをお持ちの場合：
+
+- アプリケーションは起動時に自動的に`config.json`を検出し、`config.yaml`に変換します
+- 元のJSONファイルは`config.json.bak`としてバックアップされます
+- 手動変換が必要な場合は、古いJSONファイルを削除し、アプリケーションを起動すると新しいYAMLファイルが自動生成されます
+
+---
+<br>
+
 ## 🌐 配布・再ビルドについて
 
 - 本アプリは PyInstaller により `.exe` としてビルドされています
-- ブラウザ, WebDriverは `.exe` に含まれないため、配布時には同梱または別途取得が必要です
+- `config.yaml`, ブラウザ, WebDriverは `.exe` に含まれないため、配布時には同梱または別途取得が必要です
 - Firefox Portable の再配布はライセンス上禁止されているため、使用者が各自ダウンロードしてください
 
 ---
@@ -141,11 +172,12 @@ DateInsert4AmazonPhoto/
 | `requests`   | WebDriverの自動取得 |
 | `tqdm`       | ダウンロード時の進捗表示 |
 | `selenium`   | ブラウザ自動操作 |
+| `PyYAML`     | 設定ファイル処理 |
 
 インストール方法：
 
 ```bash
-pip install requests tqdm selenium
+pip install requests tqdm selenium PyYAML
 ```
 ※ 仮想環境（venv等）を使っている場合は、先に有効化してから実行してください
 
@@ -173,8 +205,8 @@ pip install requests tqdm selenium
 
 ## 📌 今後の予定
 
-- 導入手順の簡略化（WebDriverやFirefox自動取得のさらなる統合）
-- パフォーマンス最適化
+- 処理効率の改善（並列処理の検討）
+- エラーハンドリングの強化
 
 ---
 <br>
